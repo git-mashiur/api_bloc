@@ -25,28 +25,28 @@ class HomeScreen extends StatelessWidget {
           BlocListener<CategoryBloc, CategoryState>(
             listener: (context, state) {
               if (state is CategoryLoaded) {
-                print('Categories Loaded: ${state.categories.length}'); // Debug log
+                print('Categories Loaded: ${state.categories.length}');
                 for (var category in state.categories) {
                   if (!category.image.contains('svg') && category.image != AppConstants.defaultImage) {
                     precacheImage(NetworkImage(category.image), context);
                   }
                 }
               } else if (state is CategoryError) {
-                print('Category Error: ${state.message}'); // Debug log
+                print('Category Error: ${state.message}');
               }
             },
           ),
           BlocListener<ProductBloc, ProductState>(
             listener: (context, state) {
               if (state is ProductLoaded) {
-                print('Products Loaded: ${state.products.length}'); // Debug log
+                print('Products Loaded: ${state.products.length}');
                 for (var product in state.products) {
                   if (product.images.isNotEmpty && !product.images.first.contains('svg')) {
                     precacheImage(NetworkImage(product.images.first), context);
                   }
                 }
               } else if (state is ProductError) {
-                print('Product Error: ${state.message}'); // Debug log
+                print('Product Error: ${state.message}');
               }
             },
           ),
@@ -57,203 +57,194 @@ class HomeScreen extends StatelessWidget {
             context.read<ProductBloc>().add(FetchProducts());
             await Future.delayed(const Duration(seconds: 1));
           },
-          child: SingleChildScrollView(
-            padding: EdgeInsets.all(8.w),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildCategorySection(context),
-                _buildProductCategorySection(context, 'Clothes', [1]),
-                _buildProductCategorySection(context, 'Electronics', [2]),
-                _buildProductCategorySection(context, 'Furniture', [3]),
-                _buildProductCategorySection(context, 'Shoes', [4]),
-                _buildProductCategorySection(context, 'Others', [5, 7]),
-                SizedBox(height: 16.h),
-              ],
-            ),
+          child: BlocBuilder<CategoryBloc, CategoryState>(
+            builder: (context, categoryState) {
+              return BlocBuilder<ProductBloc, ProductState>(
+                builder: (context, productState) {
+                  // Show a single loader if either categories or products are loading
+                  if (categoryState is CategoryLoading || productState is ProductLoading) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  // Show error if either fails
+                  if (categoryState is CategoryError || productState is ProductError) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            (categoryState is CategoryError ? categoryState.message : '') +
+                                (productState is ProductError ? '\n${productState.message}' : ''),
+                            style: TextStyle(fontSize: 16.sp),
+                            textAlign: TextAlign.center,
+                          ),
+                          SizedBox(height: 8.h),
+                          ElevatedButton(
+                            onPressed: () {
+                              context.read<CategoryBloc>().add(FetchCategories());
+                              context.read<ProductBloc>().add(FetchProducts());
+                            },
+                            child: Text('Retry', style: TextStyle(fontSize: 14.sp)),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  // Show content only if both are loaded
+                  if (categoryState is CategoryLoaded && productState is ProductLoaded) {
+                    return SingleChildScrollView(
+                      padding: EdgeInsets.all(8.w),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildCategorySection(context, categoryState.categories),
+                          _buildProductCategorySection(context, 'Clothes', [1], productState.products),
+                          _buildProductCategorySection(context, 'Electronics', [2], productState.products),
+                          _buildProductCategorySection(context, 'Furniture', [3], productState.products),
+                          _buildProductCategorySection(context, 'Shoes', [4], productState.products),
+                          _buildProductCategorySection(context, 'Others', [5, 7], productState.products),
+                          SizedBox(height: 16.h),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return const SizedBox();
+                },
+              );
+            },
           ),
         ),
       ),
     );
   }
 
-  Widget _buildCategorySection(BuildContext context) {
-    return BlocBuilder<CategoryBloc, CategoryState>(
-      builder: (context, state) {
-        if (state is CategoryLoading) {
-          return SizedBox(height: 150.h, child: const Center(child: CircularProgressIndicator()));
-        } else if (state is CategoryError) {
-          return SizedBox(
-            height: 150.h,
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(state.message, style: TextStyle(fontSize: 16.sp)),
-                  SizedBox(height: 8.h),
-                  ElevatedButton(
-                    onPressed: () => context.read<CategoryBloc>().add(FetchCategories()),
-                    child: Text('Retry', style: TextStyle(fontSize: 14.sp)),
-                  ),
-                ],
-              ),
-            ),
-          );
-        } else if (state is CategoryLoaded) {
-          return Container(
-            padding: EdgeInsets.symmetric(vertical: 8.h),
-            color: Colors.teal[50],
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: EdgeInsets.only(left: 8.w),
-                  child: Text('Categories (${state.categories.length})', style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold)),
-                ),
-                SizedBox(height: 8.h),
-                SizedBox(
-                  height: 120.h,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    padding: EdgeInsets.symmetric(horizontal: 8.w),
-                    itemCount: state.categories.length,
-                    itemBuilder: (context, index) {
-                      final category = state.categories[index];
-                      return Padding(
-                        padding: EdgeInsets.only(right: 8.w),
-                        child: InkWell(
-                          onTap: () {
-                            context.read<ProductBloc>().add(FetchProductsByCategory(category.id));
-                            Navigator.pushNamed(
-                              context,
-                              AppRoutes.productList,
-                              arguments: {
-                                'categoryId': category.id,
-                                'categoryName': category.name,
-                              },
-                            );
-                          },
-                          child: SizedBox(
-                            width: 80.w,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                CircleAvatar(
-                                  radius: 28.r,
-                                  child: ClipOval(
-                                    child: category.image.contains('svg')
-                                        ? SvgPicture.network(
-                                      category.image,
-                                      fit: BoxFit.cover,
-                                      width: 56.w,
-                                      height: 56.h,
-                                      placeholderBuilder: (context) => Center(child: CircularProgressIndicator()),
-                                      errorBuilder: (context, error, stackTrace) => Image.network(
-                                        AppConstants.defaultImage,
-                                        fit: BoxFit.cover,
-                                        width: 56.w,
-                                        height: 56.h,
-                                      ),
-                                    )
-                                        : CachedNetworkImage(
-                                      imageUrl: category.image,
-                                      fit: BoxFit.cover,
-                                      width: 56.w,
-                                      height: 56.h,
-                                      placeholder: (context, url) => Center(child: CircularProgressIndicator()),
-                                      errorWidget: (context, url, error) => Image.network(
-                                        AppConstants.defaultImage,
-                                        fit: BoxFit.cover,
-                                        width: 56.w,
-                                        height: 56.h,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(height: 4.h),
-                                Text(
-                                  category.name,
-                                  style: TextStyle(fontSize: 12.sp),
-                                  textAlign: TextAlign.center,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+  Widget _buildCategorySection(BuildContext context, List<CategoryModel> categories) {
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 8.h),
+      color: Colors.teal[50],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(left: 8.w),
+            child: Text('Categories (${categories.length})', style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold)),
+          ),
+          SizedBox(height: 8.h),
+          SizedBox(
+            height: 120.h,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(horizontal: 8.w),
+              itemCount: categories.length,
+              itemBuilder: (context, index) {
+                final category = categories[index];
+                return Padding(
+                  padding: EdgeInsets.only(right: 8.w),
+                  child: InkWell(
+                    onTap: () {
+                      context.read<ProductBloc>().add(FetchProductsByCategory(category.id));
+                      Navigator.pushNamed(
+                        context,
+                        AppRoutes.productList,
+                        arguments: {
+                          'categoryId': category.id,
+                          'categoryName': category.name,
+                        },
                       );
                     },
+                    child: SizedBox(
+                      width: 80.w,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 28.r,
+                            child: ClipOval(
+                              child: category.image.contains('svg')
+                                  ? SvgPicture.network(
+                                category.image,
+                                fit: BoxFit.cover,
+                                width: 56.w,
+                                height: 56.h,
+                                placeholderBuilder: (context) => Center(child: CircularProgressIndicator()),
+                                errorBuilder: (context, error, stackTrace) => Image.network(
+                                  AppConstants.defaultImage,
+                                  fit: BoxFit.cover,
+                                  width: 56.w,
+                                  height: 56.h,
+                                ),
+                              )
+                                  : CachedNetworkImage(
+                                imageUrl: category.image,
+                                fit: BoxFit.cover,
+                                width: 56.w,
+                                height: 56.h,
+                                placeholder: (context, url) => Center(child: CircularProgressIndicator()),
+                                errorWidget: (context, url, error) => Image.network(
+                                  AppConstants.defaultImage,
+                                  fit: BoxFit.cover,
+                                  width: 56.w,
+                                  height: 56.h,
+                                ),
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: 4.h),
+                          Text(
+                            category.name,
+                            style: TextStyle(fontSize: 12.sp),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                );
+              },
             ),
-          );
-        }
-        return const SizedBox();
-      },
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildProductCategorySection(BuildContext context, String categoryName, List<int> categoryIds) {
-    return BlocBuilder<ProductBloc, ProductState>(
-      builder: (context, state) {
-        if (state is ProductLoading) {
-          return SizedBox(height: 300.h, child: const Center(child: CircularProgressIndicator()));
-        } else if (state is ProductError) {
-          return SizedBox(
-            height: 300.h,
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(state.message, style: TextStyle(fontSize: 16.sp)),
-                  SizedBox(height: 8.h),
-                  ElevatedButton(
-                    onPressed: () => context.read<ProductBloc>().add(FetchProducts()),
-                    child: Text('Retry', style: TextStyle(fontSize: 14.sp)),
-                  ),
-                ],
-              ),
+  Widget _buildProductCategorySection(BuildContext context, String categoryName, List<int> categoryIds, List<ProductModel> products) {
+    final filteredProducts = products.where((product) => categoryIds.contains(product.category.id)).toList();
+    if (filteredProducts.isEmpty) return const SizedBox();
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 8.h),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(left: 8.w),
+            child: Text(
+              '$categoryName (${filteredProducts.length})',
+              style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold),
             ),
-          );
-        } else if (state is ProductLoaded) {
-          final products = state.products.where((product) => categoryIds.contains(product.category.id)).toList();
-          if (products.isEmpty) return const SizedBox();
-          return Padding(
-            padding: EdgeInsets.symmetric(vertical: 8.h),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: EdgeInsets.only(left: 8.w),
-                  child: Text(
-                    '$categoryName (${products.length})',
-                    style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                SizedBox(height: 8.h),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 8.w,
-                    mainAxisSpacing: 8.h,
-                    childAspectRatio: 0.7,
-                  ),
-                  itemCount: products.length,
-                  itemBuilder: (context, index) {
-                    final product = products[index];
-                    return _buildProductCard(context, product);
-                  },
-                ),
-              ],
+          ),
+          SizedBox(height: 8.h),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 8.w,
+              mainAxisSpacing: 8.h,
+              childAspectRatio: 0.7,
             ),
-          );
-        }
-        return const SizedBox();
-      },
+            itemCount: filteredProducts.length,
+            itemBuilder: (context, index) {
+              final product = filteredProducts[index];
+              return _buildProductCard(context, product);
+            },
+          ),
+        ],
+      ),
     );
   }
 
